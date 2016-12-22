@@ -1,0 +1,13 @@
+{
+  "name": "purescript-react-simpleaction",
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components"
+  ],
+  "dependencies": {
+    "purescript-react": "purescript-contrib/purescript-react",
+    "purescript-aff": "^2.0.2",
+    "purescript-eff-functions": "^2.0.0"
+  }
+}
