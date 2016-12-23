@@ -1,13 +1,21 @@
 {
   "name": "purescript-react-simpleaction",
+  "description": "A simple action dispatcher for purescript-react",
+  "keywords": [
+    "react",
+    "react native"
+  ],
+  "authors": [
+    "Jolse Maginnis <doolse@gmail.com>"
+  ],
   "ignore": [
     "**/.*",
     "node_modules",
     "bower_components"
   ],
   "dependencies": {
-    "purescript-react": "purescript-contrib/purescript-react",
     "purescript-aff": "^2.0.2",
-    "purescript-eff-functions": "^2.0.0"
+    "purescript-eff-functions": "^2.0.0",
+    "purescript-react": "^2.0.0"
   }
 }
