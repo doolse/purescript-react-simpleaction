@@ -1,30 +1,18 @@
 module React.SimpleAction where
 
 import Prelude
-import Control.Monad.Aff (Aff, launchAff)
 import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.Class (class MonadEff, liftEff)
-import Control.Monad.Eff.Unsafe (unsafeCoerceEff)
-import Control.Monad.Reader (ReaderT(ReaderT), runReaderT)
-import Data.Function.Eff (EffFn1, mkEffFn1)
+import Control.Monad.Reader (ReaderT(ReaderT))
 import Data.Function.Uncurried (Fn4, runFn4)
-import React (ReactElement, ReactProps, ReactRefs, ReactState, ReactThis, ReadOnly, ReadWrite, Refs, Render, readState, transformState)
+import React (ReactClass, ReactElement, ReactProps, ReactRefs, ReactState, ReactThis, ReadOnly, ReadWrite, Refs, Render, createClass, readState, spec, transformState)
 import React (getProps, getRefs) as R
+import React.SimpleAction.Dispatch (class EvalRenderer, evalRender)
 
 type ReactReaderT props state m a = ReaderT (ReactThis props state) m a
 
 reactReaderT :: forall props state m a. (ReactThis props state -> m a) -> ReactReaderT props state m a
 reactReaderT = ReaderT
-
-stateRenderer :: forall props state eff. (ReactThis props state -> state -> ReactElement) -> Render props state eff
-stateRenderer f this = do
-  p <- readState this
-  pure $ f this p
-
-propsRenderer :: forall props state eff. (ReactThis props state -> props -> ReactElement) -> Render props state eff
-propsRenderer f this = do
-  p <- R.getProps this
-  pure $ f this p
 
 getProps :: forall m props state eff. MonadEff ( props :: ReactProps | eff ) m => ReactReaderT props state m props
 getProps =  reactReaderT (liftEff <<< R.getProps)
@@ -48,25 +36,24 @@ unsafeWithRef f s = do
   refs <- getRefs
   liftEff $ runFn4 mapRef f (pure unit) refs s
 
-class Dispatchable m props state eff | m -> props, m -> state, m -> eff where
-  dispatchEff :: m -> ReactThis props state -> Eff eff Unit
+emptyHandler :: forall a m. (Applicative m) => a -> m Unit
+emptyHandler = const $ pure unit
 
-instance readerTTest :: Dispatchable (m eff Unit) props state eff => Dispatchable (ReaderT (ReactThis props state) (m eff) Unit) props state eff where
-  dispatchEff ma this = dispatchEff (runReaderT ma this) this
+createRenderer :: forall renderable props state eval eff. (EvalRenderer renderable ReactElement eval props state) => (state -> renderable) -> eval -> Render props state eff
+createRenderer f e t = do
+  s <- readState t
+  pure $ evalRender t e (f s)
 
-instance effDispacher :: Dispatchable (Eff eff Unit) props state eff where
-  dispatchEff e _ = e
+createRendererPS :: forall renderable props state eval eff. (EvalRenderer renderable ReactElement eval props state)  => (props -> state -> renderable) -> eval -> Render props state eff
+createRendererPS f e t = do
+  p <- R.getProps t
+  createRenderer (f p) e t
 
-instance affDispacher :: Dispatchable (Aff eff Unit) props state eff where
-  dispatchEff a _ = unsafeCoerceEff $ void $ launchAff a
+effEval :: forall a props state eff. (a -> ReaderT (ReactThis props state) (Eff eff) Unit) -> (a -> ReaderT (ReactThis props state) (Eff eff) Unit)
+effEval = id
 
-handle :: forall props state eff m ev. (Dispatchable m props state eff) => ReactThis props state -> (ev -> m) -> EffFn1 eff ev Unit
-handle this f = mkEffFn1 \ev -> dispatchEff (f ev) this
+createComponent :: forall props state renderable eval. EvalRenderer renderable ReactElement eval props state => state -> (state -> renderable) -> eval -> ReactClass props
+createComponent s r e = createClass $ (spec s $ createRenderer r e)
 
-handleEff :: forall props state eff ev. ReactThis props state -> (ev -> ReactReaderT props state (Eff eff) Unit) -> EffFn1 eff ev Unit
-handleEff = handle
-
-newtype Dispatcher eff a = Dispatcher (forall ev. (ev -> a) -> EffFn1 eff ev Unit)
-
-withDispatcher :: forall eff p s a b m. Dispatchable m p s eff => (a -> m) -> (Dispatcher eff a -> b) -> ReactThis p s -> b
-withDispatcher evalf r this = r (Dispatcher \f -> mkEffFn1 \ev -> dispatchEff (evalf $ f ev) this)
+createComponentPS :: forall props state renderable eval. EvalRenderer renderable ReactElement eval props state => state -> (props -> state -> renderable) -> eval -> ReactClass props
+createComponentPS s r e = createClass $ (spec s $ createRendererPS r e)
