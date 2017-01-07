@@ -1,6 +1,7 @@
 module React.SimpleAction where
 
 import Prelude
+import Control.Monad.Aff.Free (class Affable, fromEff)
 import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.Class (class MonadEff, liftEff)
 import Control.Monad.Reader (ReaderT(ReaderT))
@@ -19,6 +20,9 @@ getProps =  reactReaderT (liftEff <<< R.getProps)
 
 modifyState :: forall m props state eff. MonadEff ( state :: ReactState ReadWrite | eff ) m => (state -> state) -> ReactReaderT props state m Unit
 modifyState f = reactReaderT (\this -> liftEff $ transformState this f)
+
+modifyStateAff :: forall m props state eff. Affable ( state :: ReactState ReadWrite | eff ) m => (state -> state) -> ReactReaderT props state m Unit
+modifyStateAff f = reactReaderT (\this -> fromEff $ transformState this f)
 
 getState :: forall m props state eff. MonadEff ( state :: ReactState ReadWrite | eff ) m => ReactReaderT props state m state
 getState = reactReaderT (liftEff <<< readState)
