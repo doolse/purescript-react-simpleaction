@@ -16,8 +16,6 @@
   "dependencies": {
     "purescript-aff": "^2.0.2",
     "purescript-eff-functions": "^2.0.0",
-    "purescript-react": "^2.0.0",
-    "purescript-proxy": "^1.0.0",
-    "purescript-aff-free": "^3.0.0"
+    "purescript-react": "^2.0.0"
   }
 }

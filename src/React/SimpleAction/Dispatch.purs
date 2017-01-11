@@ -7,22 +7,22 @@ import Control.Monad.Eff.Unsafe (unsafeCoerceEff)
 import Control.Monad.Reader (ReaderT, runReaderT)
 import Data.Function.Eff (EffFn1, mkEffFn1)
 import Data.Maybe (Maybe, maybe)
-import React (ReactElement, ReactThis)
+import React (ReactElement)
 
 class Dispatchable eval a context | eval -> context where
-  dispatchEff :: forall eff. eval -> a -> context -> Eff eff Unit
+  dispatchEff :: forall eff. eval -> context -> a -> Eff eff Unit
 
 instance funcMaybeDispatch :: Dispatchable m Unit context => Dispatchable (a -> m) (Maybe a) context where
-  dispatchEff f ma this = maybe (pure unit) (\a -> dispatchEff (f a) unit this) ma
+  dispatchEff f this ma = maybe (pure unit) (\a -> dispatchEff (f a) this unit) ma
 
 instance funcDispatch :: Dispatchable m Unit context => Dispatchable (a -> m) a context where
-  dispatchEff f a = dispatchEff (f a) unit
+  dispatchEff f c a = dispatchEff (f a) c unit
 
 instance readerTTest :: Dispatchable (m eff Unit) Unit context => Dispatchable (ReaderT context (m eff) Unit) Unit context where
-  dispatchEff ma _ this = dispatchEff (runReaderT ma this) unit this
+  dispatchEff ma this _ = dispatchEff (runReaderT ma this) this unit
 
 instance flippedDispatcher :: Dispatchable a Unit context => Dispatchable Unit a context where
-  dispatchEff = flip dispatchEff
+  dispatchEff e c a = dispatchEff a c e
 
 instance effDispacher :: Dispatchable (Eff eff Unit) Unit context where
   dispatchEff e _ _ = unsafeCoerceEff e
@@ -30,18 +30,23 @@ instance effDispacher :: Dispatchable (Eff eff Unit) Unit context where
 instance affDispacher :: Dispatchable (Aff eff Unit) Unit context where
   dispatchEff a _ _ = unsafeCoerceEff $ void $ launchAff a
 
-class EvalRenderer dispatcher result eval props state | dispatcher -> result props state where
-  evalRender :: ReactThis props state -> eval -> dispatcher -> result
+newtype EffEval eff r a = EffEval (a -> ReaderT r (Eff eff) Unit)
 
-instance elemRenderable :: EvalRenderer ReactElement ReactElement eval props state where
+instance effEvalDispatcher :: Dispatchable (a -> ReaderT context (Eff eff) Unit) a' context => Dispatchable (EffEval eff context a) a' context where
+  dispatchEff (EffEval e) = dispatchEff e
+
+class EvalRenderer dispatcher result eval context | dispatcher -> result context where
+  evalRender :: context -> eval -> dispatcher -> result
+
+instance elemRenderable :: EvalRenderer ReactElement ReactElement eval context where
   evalRender _ _ = id
 
 newtype DispatchEff a = DispatchEff (forall ev eff. (ev -> a) -> ev -> Eff eff Unit)
 
 newtype DispatchEffFn a = DispatchEffFn (forall ev eff. (ev -> a) -> EffFn1 eff ev Unit)
 
-instance dispatchRenderable :: (Dispatchable eval a (ReactThis props state), EvalRenderer result ReactElement eval props state) => EvalRenderer (DispatchEff a -> result) ReactElement eval props state where
-  evalRender t eval f = evalRender t eval $ f $ DispatchEff (\handle ev -> dispatchEff eval (handle ev) t)
+instance dispatchRenderable :: (Dispatchable eval a context, EvalRenderer next result eval context) => EvalRenderer (DispatchEff a -> next) result eval context where
+  evalRender t eval f = evalRender t eval $ f $ DispatchEff (\handle ev -> dispatchEff eval t (handle ev))
 
-instance dispatchEffFn :: (Dispatchable eval a (ReactThis props state), EvalRenderer result ReactElement eval props state) => EvalRenderer (DispatchEffFn a -> result) ReactElement eval props state where
-  evalRender t eval f = evalRender t eval $ f $ DispatchEffFn (\handle -> mkEffFn1 \ev -> dispatchEff eval (handle ev) t)
+instance dispatchEffFn :: (Dispatchable eval a context, EvalRenderer next result eval context) => EvalRenderer (DispatchEffFn a -> next) result eval context where
+  evalRender t eval f = evalRender t eval $ f $ DispatchEffFn (\handle -> mkEffFn1 \ev -> dispatchEff eval t (handle ev))
