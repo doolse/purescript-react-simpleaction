@@ -8,8 +8,6 @@ import Control.Monad.Reader (ReaderT, runReaderT)
 import Data.Function.Eff (EffFn1, mkEffFn1)
 import Data.Maybe (Maybe, maybe)
 
-
-
 class Dispatchable eval context action result | eval -> context where
   dispatch :: eval -> context -> action -> result
 
@@ -18,6 +16,9 @@ instance funcMaybeDispatch :: (Applicative m, Dispatchable Unit context dispatch
 
 instance funcDispatch :: Dispatchable Unit context m result => Dispatchable (action -> m) context action result where
   dispatch f c a = dispatch unit c (f a)
+
+instance dispatchToContextFunc :: Applicative m => Dispatchable eval context a (context -> m a) where
+  dispatch _ _ a = const $ pure a
 
 instance readerTTest :: Dispatchable eval context (m a) result => Dispatchable eval context (ReaderT context m a) result where
   dispatch e c a = dispatch e c $ runReaderT a c
@@ -38,10 +39,24 @@ newtype DispatchEff a = DispatchEff (forall ev eff. (ev -> a) -> ev -> Eff eff U
 
 newtype DispatchEffFn a = DispatchEffFn (forall ev eff. (ev -> a) -> EffFn1 eff ev Unit)
 
-instance dispatchEff :: (Dispatchable eval context action (Eff eff Unit), Dispatchable eval context next result) =>
+instance dispatchEffD :: (Dispatchable eval context action (Eff eff Unit), Dispatchable eval context next result) =>
   Dispatchable eval context (DispatchEff action -> next) result where
   dispatch eval c f =  dispatch eval c (f $ DispatchEff (\handle ev -> unsafeCoerceEff $ (dispatch eval c (handle ev)) :: Eff eff Unit))
 
-instance dispatchEffFn :: (Dispatchable eval context action (Eff eff Unit), Dispatchable eval context next result) =>
-  Dispatchable eval context (DispatchEffFn action -> next) result where
-  dispatch eval c f =  dispatch eval c (f $ DispatchEffFn (\handle -> mkEffFn1 \ev -> unsafeCoerceEff $ (dispatch eval c $ handle ev) :: Eff eff Unit))-- dispatch eval c (handle ev)))
+instance dispatchEffFnD :: (Dispatchable eval context action (Eff eff Unit), Dispatchable eval context next result) => Dispatchable eval context (DispatchEffFn action -> next) result where
+  dispatch eval c f =  dispatch eval c $ f $ mkDispatchEffFn (dispatch eval c :: action -> Eff eff Unit)
+
+mkDispatchEffFn :: forall action eff. (action -> Eff eff Unit) -> DispatchEffFn action
+mkDispatchEffFn f = DispatchEffFn (\handle -> mkEffFn1 \ev -> unsafeCoerceEff $ f (handle ev))
+
+dispatchEff :: forall ev action eff. DispatchEff action -> (ev -> action) -> ev -> Eff eff Unit
+dispatchEff (DispatchEff d) = d
+
+dispatchEffFn :: forall ev action eff. DispatchEffFn action -> (ev -> action) -> EffFn1 eff ev Unit
+dispatchEffFn (DispatchEffFn d) = d
+
+dispatchEff_ :: forall ev action eff. DispatchEff action -> action -> ev -> Eff eff Unit
+dispatchEff_ (DispatchEff d) a = d $ const a
+
+dispatchEffFn_ :: forall ev action eff. DispatchEffFn action -> action -> EffFn1 eff ev Unit
+dispatchEffFn_ (DispatchEffFn d) a = d $ const a
