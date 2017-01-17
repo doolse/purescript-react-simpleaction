@@ -36,6 +36,8 @@ effEval = id
 
 newtype DispatchEff a = DispatchEff (forall ev eff. (ev -> a) -> ev -> Eff eff Unit)
 
+newtype DispatchAff a = DispatchAff (forall ev eff. (ev -> a) -> ev -> Aff eff Unit)
+
 newtype DispatchEffFn a = DispatchEffFn (forall ev eff. (ev -> a) -> EffFn1 eff ev Unit)
 
 newtype DispatchEffFn2 a = DispatchEffFn2 (forall ev ev2 eff. (ev -> ev2 -> a) -> EffFn2 eff ev ev2 Unit)
