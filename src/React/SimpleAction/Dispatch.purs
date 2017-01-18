@@ -2,6 +2,7 @@ module React.SimpleAction.Dispatch where
 
 import Prelude
 import Control.Monad.Aff (Aff, launchAff)
+import Control.Monad.Aff.Unsafe (unsafeCoerceAff)
 import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.Unsafe (unsafeCoerceEff)
 import Control.Monad.Reader (ReaderT, runReaderT)
@@ -28,8 +29,11 @@ instance applicativeDispatcher :: Applicative m => Dispatchable eval context a (
 instance effDispacher :: Dispatchable eval context (Eff eff a) (Eff eff2 a) where
   dispatch _ _ = unsafeCoerceEff
 
-instance affDispacher :: Dispatchable eval context (Aff eff a) (Eff eff2 Unit) where
+instance aff2EffDispacher :: Dispatchable eval context (Aff eff a) (Eff eff2 Unit) where
   dispatch _ _ = void <<< unsafeCoerceEff <<< launchAff
+
+instance aff2AffDispacher :: Dispatchable eval context (Aff eff a) (Aff eff2 a) where
+  dispatch _ _ = unsafeCoerceAff
 
 effEval ::  forall a context eff. (a -> ReaderT context (Eff eff) Unit) -> a -> ReaderT context (Eff eff) Unit
 effEval = id
@@ -43,6 +47,10 @@ newtype DispatchEffFn a = DispatchEffFn (forall ev eff. (ev -> a) -> EffFn1 eff 
 newtype DispatchEffFn2 a = DispatchEffFn2 (forall ev ev2 eff. (ev -> ev2 -> a) -> EffFn2 eff ev ev2 Unit)
 
 newtype DispatchEffFn3 a = DispatchEffFn3 (forall ev ev2 ev3 eff. (ev -> ev2 -> ev3 -> a) -> EffFn3 eff ev ev2 ev3 Unit)
+
+instance dispatchAffD :: (Applicative (m eff), Dispatchable eval context action (Aff eff Unit))
+  => FromContext eval context (DispatchAff action) m eff where
+  fromContext eval c = pure $ DispatchAff (\handle ev -> unsafeCoerceAff $ (dispatch eval c (handle ev)) :: Aff eff Unit)
 
 instance dispatchEffD :: (Applicative (m eff), Dispatchable eval context action (Eff eff Unit))
   => FromContext eval context (DispatchEff action) m eff where
