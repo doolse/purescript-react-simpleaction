@@ -87,11 +87,11 @@ createComponent' :: forall props state initialstate eval renderer eff. ReactSpec
    initialstate -> (state -> renderer) -> eval -> ReactClass props
 createComponent' f state renderer eval = createClass $ fst $ execRWS f eval (createSpec eval state renderer)
 
-didMount :: forall eval props state action eff. Dispatchable eval (ReactThis props state) action (Eff ( props :: R.ReactProps, state :: R.ReactState ReadWrite, refs :: ReactRefs ReadOnly | eff) Unit)
+didMount :: forall eval props state action eff. Dispatchable eval (ReactThis props state) action (Eff ( props :: R.ReactProps, state :: R.ReactState ReadWrite, refs :: ReactRefs ReadOnly | eff))
   => action -> RWS eval Unit (ReactSpec props state eff) Unit
 didMount a = ask >>= \e -> modify _ { componentDidMount = flip (dispatch e) a }
 
-willUnmount :: forall eval props state action eff. Dispatchable eval (ReactThis props state) action (Eff ( props :: R.ReactProps, state :: R.ReactState ReadOnly, refs :: ReactRefs ReadOnly | eff) Unit)
+willUnmount :: forall eval props state action eff. Dispatchable eval (ReactThis props state) action (Eff (props :: R.ReactProps, state :: R.ReactState ReadOnly, refs :: ReactRefs ReadOnly | eff))
   => action -> RWS eval Unit (ReactSpec props state eff) Unit
 willUnmount a = ask >>= \e -> modify _ { componentWillUnmount = flip (dispatch e) a }
 

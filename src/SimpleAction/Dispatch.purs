@@ -22,29 +22,27 @@ import Data.Function.Eff (EffFn1, EffFn2, EffFn3, mkEffFn1, mkEffFn2, mkEffFn3)
 import Data.Maybe (Maybe, maybe)
 import Type.Equality (class TypeEquals, to)
 
-class Dispatchable eval context action result | eval -> context where
-  dispatch :: eval -> context -> action -> result
+class Dispatchable eval context action m | eval -> context where
+  dispatch :: eval -> context -> action -> m Unit
 
-instance funcMaybeDispatch :: (Applicative m, Dispatchable Unit context dispatchable (m Unit)) => Dispatchable (action -> dispatchable) context (Maybe action) (m Unit) where
-  dispatch f c ma = maybe (pure unit) (\a -> dispatch (f a) c unit) ma
+instance funcMaybeDispatch :: (Applicative m,  Dispatchable (action -> dispatchable) context dispatchable m)
+  => Dispatchable (action -> dispatchable) context (Maybe action) m where
+  dispatch f c ma = maybe (pure unit) (\a -> dispatch f c (f a)) ma
 
-instance funcDispatch :: Dispatchable Unit context m result => Dispatchable (action -> m) context action result where
-  dispatch f c a = dispatch unit c (f a)
+instance funcDispatch :: Dispatchable (action -> next) context next m => Dispatchable (action -> next) context action m where
+  dispatch f c a = dispatch f c (f a)
 
-instance readerTTest :: Dispatchable eval context (m a) result => Dispatchable eval context (ReaderT context m a) result where
+instance readerTTest :: Dispatchable eval context (m a) n => Dispatchable eval context (ReaderT context m a) n where
   dispatch e c a = dispatch e c $ runReaderT a c
 
-instance applicativeDispatcher :: Applicative m => Dispatchable eval context a (m a) where
-  dispatch _ _ = pure
+instance effDispacher :: Dispatchable eval context (Eff eff a) (Eff eff2) where
+  dispatch _ _ = void <<< unsafeCoerceEff
 
-instance effDispacher :: Dispatchable eval context (Eff eff a) (Eff eff2 a) where
-  dispatch _ _ = unsafeCoerceEff
+instance affDispacher :: Dispatchable eval context (Aff eff a) (Aff eff2) where
+  dispatch _ _ = void <<< unsafeCoerceAff
 
-instance aff2EffDispacher :: Dispatchable eval context (Aff eff a) (Eff eff2 Unit) where
-  dispatch _ _ = void <<< unsafeCoerceEff <<< launchAff
-
-instance aff2AffDispacher :: Dispatchable eval context (Aff eff a) (Aff eff2 a) where
-  dispatch _ _ = unsafeCoerceAff
+instance aff2EffDispacher :: Dispatchable eval context (Aff eff a) (Eff eff2) where
+  dispatch e c = (dispatch e c) <<< launchAff
 
 effEval ::  forall a context eff. (a -> ReaderT context (Eff eff) Unit) -> a -> ReaderT context (Eff eff) Unit
 effEval = id
@@ -62,24 +60,24 @@ newtype DispatchEffFn2 a = DispatchEffFn2 (forall ev ev2 eff. (ev -> ev2 -> a) -
 
 newtype DispatchEffFn3 a = DispatchEffFn3 (forall ev ev2 ev3 eff. (ev -> ev2 -> ev3 -> a) -> EffFn3 eff ev ev2 ev3 Unit)
 
-instance dispatchAffD :: (Applicative (m eff), Dispatchable eval context action (Aff eff Unit))
-  => FromContext eval context (DispatchAff action) m eff where
+instance dispatchAffD :: (Applicative (m eff2), Dispatchable eval context action (Aff eff))
+  => FromContext eval context (DispatchAff action) m eff2 where
   fromContext eval c = pure $ DispatchAff (\handle ev -> unsafeCoerceAff $ (dispatch eval c (handle ev)) :: Aff eff Unit)
 
-instance dispatchEffD :: (Applicative (m eff), Dispatchable eval context action (Eff eff Unit))
-  => FromContext eval context (DispatchEff action) m eff where
+instance dispatchEffD :: (Applicative (m eff2), Dispatchable eval context action (Eff eff))
+  => FromContext eval context (DispatchEff action) m eff2 where
   fromContext eval c = pure $ DispatchEff (\handle ev -> unsafeCoerceEff $ (dispatch eval c (handle ev)) :: Eff eff Unit)
 
-instance dispatchEffFnD :: (Applicative (m eff), Dispatchable eval context action (Eff eff Unit))
-  => FromContext eval context (DispatchEffFn action) m eff where
+instance dispatchEffFnD :: (Applicative (m eff2), Dispatchable eval context action (Eff eff))
+  => FromContext eval context (DispatchEffFn action) m eff2 where
   fromContext eval c = pure $ DispatchEffFn (\handle -> mkEffFn1 \ev -> unsafeCoerceEff $ (dispatch eval c (handle ev)) :: Eff eff Unit)
 
-instance dispatchEffFn2D :: (Applicative (m eff), Dispatchable eval context action (Eff eff Unit))
-  => FromContext eval context (DispatchEffFn2 action) m eff where
+instance dispatchEffFn2D :: (Applicative (m eff2), Dispatchable eval context action (Eff eff))
+  => FromContext eval context (DispatchEffFn2 action) m eff2 where
   fromContext eval c = pure $ DispatchEffFn2 (\handle -> mkEffFn2 \ev ev2 -> unsafeCoerceEff $ (dispatch eval c (handle ev ev2)) :: Eff eff Unit)
 
-instance dispatchEffFn3D :: (Applicative (m eff), Dispatchable eval context action (Eff eff Unit))
-  => FromContext eval context (DispatchEffFn3 action) m eff where
+instance dispatchEffFn3D :: (Applicative (m eff2), Dispatchable eval context action (Eff eff))
+  => FromContext eval context (DispatchEffFn3 action) m eff2 where
   fromContext eval c = pure $ DispatchEffFn3 (\handle -> mkEffFn3 \ev ev2 ev3 -> unsafeCoerceEff $ (dispatch eval c (handle ev ev2 ev3)) :: Eff eff Unit)
 
 newtype Context a = Context a
