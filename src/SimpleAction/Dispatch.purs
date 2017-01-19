@@ -1,4 +1,16 @@
-module React.SimpleAction.Dispatch where
+module SimpleAction.Dispatch (
+  dispatch
+, class Dispatchable
+, effEval
+, fromContext
+, class FromContext
+, Context(..)
+, DispatchAff(..)
+, DispatchEff(..)
+, DispatchEffFn(..)
+, DispatchEffFn2(..)
+, DispatchEffFn3(..)
+) where
 
 import Prelude
 import Control.Monad.Aff (Aff, launchAff)
@@ -8,7 +20,6 @@ import Control.Monad.Eff.Unsafe (unsafeCoerceEff)
 import Control.Monad.Reader (ReaderT, runReaderT)
 import Data.Function.Eff (EffFn1, EffFn2, EffFn3, mkEffFn1, mkEffFn2, mkEffFn3)
 import Data.Maybe (Maybe, maybe)
-import React (ReactProps, ReactState, ReactThis, Read, getProps, readState)
 import Type.Equality (class TypeEquals, to)
 
 class Dispatchable eval context action result | eval -> context where
@@ -37,6 +48,9 @@ instance aff2AffDispacher :: Dispatchable eval context (Aff eff a) (Aff eff2 a) 
 
 effEval ::  forall a context eff. (a -> ReaderT context (Eff eff) Unit) -> a -> ReaderT context (Eff eff) Unit
 effEval = id
+
+class FromContext eval context a m (eff :: # !) | eval context a m -> eff where
+  fromContext :: eval -> context -> m eff a
 
 newtype DispatchEff a = DispatchEff (forall ev eff. (ev -> a) -> ev -> Eff eff Unit)
 
@@ -68,29 +82,7 @@ instance dispatchEffFn3D :: (Applicative (m eff), Dispatchable eval context acti
   => FromContext eval context (DispatchEffFn3 action) m eff where
   fromContext eval c = pure $ DispatchEffFn3 (\handle -> mkEffFn3 \ev ev2 ev3 -> unsafeCoerceEff $ (dispatch eval c (handle ev ev2 ev3)) :: Eff eff Unit)
 
-dispatchEff :: forall ev action eff. DispatchEff action -> (ev -> action) -> ev -> Eff eff Unit
-dispatchEff (DispatchEff d) = d
+newtype Context a = Context a
 
-dispatchEffFn :: forall ev action eff. DispatchEffFn action -> (ev -> action) -> EffFn1 eff ev Unit
-dispatchEffFn (DispatchEffFn d) = d
-
-dispatchEff_ :: forall ev action eff. DispatchEff action -> action -> ev -> Eff eff Unit
-dispatchEff_ (DispatchEff d) a = d $ const a
-
-dispatchEffFn_ :: forall ev action eff. DispatchEffFn action -> action -> EffFn1 eff ev Unit
-dispatchEffFn_ (DispatchEffFn d) a = d $ const a
-
-newtype State s = State s
-newtype Props p = Props p
-
-class FromContext eval context a m (eff :: # !) | eval context a m -> eff where
-  fromContext :: eval -> context -> m eff a
-
-instance stateFromContext :: TypeEquals state state2 => FromContext eval (ReactThis props state) (State state2) Eff (state::ReactState (read::Read)|eff) where
-  fromContext _ this = State <<< to <$> readState this
-
-instance propsFromContext :: TypeEquals props props2 => FromContext eval (ReactThis props state) (Props props2) Eff (props::ReactProps|eff) where
-  fromContext _ this = Props <<< to <$> getProps this
-
-instance thisFromContext :: (TypeEquals (ReactThis props state) (ReactThis props2 state2), Applicative (m eff)) => FromContext eval (ReactThis props state) (ReactThis props2 state2) m eff where
-  fromContext _ this = pure $ to this
+instance contextFromContext :: (TypeEquals context context2, Applicative (m eff)) => FromContext eval context (Context context2) m eff where
+  fromContext _ c = pure (Context $ to c)
